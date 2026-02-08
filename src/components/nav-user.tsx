@@ -1,16 +1,10 @@
 "use client"
 
-import Link from "next/link"
-import { useRouter } from "next/navigation"
 import {
   ChevronsUpDown,
-  CreditCard,
   ExternalLink,
   HelpCircle,
   FileText,
-  LogOut,
-  Settings,
-  Users,
 } from "lucide-react"
 
 import {
@@ -44,7 +38,6 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
-  const router = useRouter()
 
   return (
     <SidebarMenu>
@@ -57,7 +50,7 @@ export function NavUser({
             >
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                <AvatarFallback className="rounded-lg">TU</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
@@ -76,7 +69,7 @@ export function NavUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                  <AvatarFallback className="rounded-lg">TU</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
@@ -86,27 +79,6 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem asChild>
-                <Link href="/settings?tab=billing">
-                  <CreditCard />
-                  Billing & Usage
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/settings?tab=users">
-                  <Users />
-                  User Management
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem asChild>
-                <Link href="/settings">
-                  <Settings />
-                  Settings
-                </Link>
-              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a href="https://help.olimi.ai" target="_blank" rel="noopener noreferrer">
                   <HelpCircle />
@@ -122,11 +94,6 @@ export function NavUser({
                 </a>
               </DropdownMenuItem>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/sign-in")}>
-              <LogOut />
-              Log out
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

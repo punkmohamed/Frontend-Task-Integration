@@ -1,17 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-  Bot,
-  Users,
-  Megaphone,
-  BarChart3,
-  Mic,
-  AudioLines,
-  FileAudio,
-  Phone,
-  MessageSquare,
-} from "lucide-react"
+import { Bot } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -28,34 +18,15 @@ import {
 
 const data = {
   user: {
-    name: "Omar",
-    email: "omar@olimi.ai",
+    name: "Test User",
+    email: "developer@test.com",
     avatar: "",
   },
   navGroups: [
     {
       label: "AI Call Agent",
       items: [
-        { title: "Agents", url: "/agents", icon: Bot },
-        { title: "Customer List", url: "/customers", icon: Users },
-        { title: "Campaigns", url: "/campaigns", icon: Megaphone },
-        { title: "Analytics", url: "#", icon: BarChart3 },
-        { title: "Recordings", url: "/recordings", icon: Mic },
-      ],
-    },
-    {
-      label: "Text to Speech",
-      items: [{ title: "Generate Speech", url: "#", icon: AudioLines }],
-    },
-    {
-      label: "Transcription (ASR)",
-      items: [{ title: "Transcribe Audio", url: "#", icon: FileAudio }],
-    },
-    {
-      label: "WhatsApp Marketing",
-      items: [
-        { title: "Connected Numbers", url: "#", icon: Phone },
-        { title: "WhatsApp Campaigns", url: "#", icon: MessageSquare },
+        { title: "Create Agent", url: "/agents/createAgent", icon: Bot },
       ],
     },
   ],
@@ -68,7 +39,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="/agents">
+              <a href="/agents/createAgent">
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Bot className="size-4" />
                 </div>
