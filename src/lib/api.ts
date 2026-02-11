@@ -59,14 +59,58 @@ export const registerAttachment = async (
   return response.data;
 };
 
-// Save a new agent
+// Agent save & test call
+export interface AgentPayload {
+  name: string;
+  description: string;
+  callType: string;
+  language: string;
+  voice: string;
+  prompt: string;
+  model: string;
+  latency: number;
+  speed: number;
+  callScript: string;
+  serviceDescription: string;
+  attachments: string[];
+  tools: {
+    allowHangUp: boolean;
+    allowCallback: boolean;
+    liveTransfer: boolean;
+  };
+}
+
+export interface AgentResponse extends AgentPayload {
+  id: string;
+}
+
+export interface TestCallPayload {
+  firstName: string;
+  lastName: string;
+  gender: string;
+  phoneNumber: string;
+}
+
+export const createAgent = async (data: AgentPayload): Promise<AgentResponse> => {
+  const response = await apiClient.post("/agents", data);
+  return response.data;
+};
+
+export const updateAgent = async (
+  id: string,
+  data: AgentPayload
+): Promise<AgentResponse> => {
+  const response = await apiClient.put(`/agents/${id}`, data);
+  return response.data;
+};
+
 export const saveAgent = async (data: unknown) => {
-  const response = await apiClient.post("/models", data);
+  const response = await apiClient.post("/agents", data);
   return response.data;
 };
 
 // Start a test call for an agent
-export const startCall = async (id: string) => {
-  const response = await apiClient.post(`/agents/${id}/test-call`);
+export const startCall = async (id: string, payload: TestCallPayload) => {
+  const response = await apiClient.post(`/agents/${id}/test-call`, payload);
   return response.data;
 };

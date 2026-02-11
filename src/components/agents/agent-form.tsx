@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
+import { toast } from "react-toastify";
 import {
   ChevronDown,
   Upload,
@@ -52,7 +53,13 @@ import {
   requestUploadUrl,
   uploadFileToSignedUrl,
   registerAttachment,
+  createAgent,
+  updateAgent,
+  startCall,
 } from "@/lib/api";
+import { useFetch } from "@/hooks/use-fetch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { agentSchema } from "@/validation/agent-schema";
 import type { languages } from "@/interface/languages";
 import type { voices } from "@/interface/voices";
 import type { prompts } from "@/interface/prompts";
@@ -130,6 +137,7 @@ function CollapsibleSection({
 }
 
 export interface AgentFormInitialData {
+  id?: string;
   agentName?: string;
   description?: string;
   callType?: string;
@@ -141,6 +149,12 @@ export interface AgentFormInitialData {
   speed?: number;
   callScript?: string;
   serviceDescription?: string;
+  attachments?: string[];
+  tools?: {
+    allowHangUp: boolean;
+    allowCallback: boolean;
+    liveTransfer: boolean;
+  };
 }
 
 interface AgentFormProps {
@@ -150,6 +164,7 @@ interface AgentFormProps {
 
 export function AgentForm({ mode, initialData }: AgentFormProps) {
   // Form state — initialized from initialData when provided
+  const [agentId, setAgentId] = useState<string | undefined>(initialData?.id);
   const [agentName, setAgentName] = useState(initialData?.agentName ?? "");
   const [callType, setCallType] = useState(initialData?.callType ?? "");
   const [language, setLanguage] = useState(initialData?.language ?? "");
@@ -165,11 +180,26 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
 
   // Service/Product Description
   const [serviceDescription, setServiceDescription] = useState(initialData?.serviceDescription ?? "");
-  // Dropdown data
-  const [languagesList, setLanguagesList] = useState<languages[]>([]);
-  const [voicesList, setVoicesList] = useState<voices[]>([]);
-  const [promptsList, setPromptsList] = useState<prompts[]>([]);
-  const [modelsList, setModelsList] = useState<models[]>([]);
+  const {
+    data: languagesList,
+    loading: languagesLoading,
+    error: languagesError,
+  } = useFetch<languages[]>(getLanguages, []);
+  const {
+    data: voicesList,
+    loading: voicesLoading,
+    error: voicesError,
+  } = useFetch<voices[]>(getVoices, []);
+  const {
+    data: promptsList,
+    loading: promptsLoading,
+    error: promptsError,
+  } = useFetch<prompts[]>(getPrompts, []);
+  const {
+    data: modelsList,
+    loading: modelsLoading,
+    error: modelsError,
+  } = useFetch<models[]>(getModels, []);
 
   // Reference Data
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -182,26 +212,13 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
   const [testGender, setTestGender] = useState("");
   const [testPhone, setTestPhone] = useState("");
 
-  useEffect(() => {
-    const fetchDropdownData = async () => {
-      try {
-        const [languagesData, voicesData, promptsData, modelsData] = await Promise.all([
-          getLanguages(),
-          getVoices(),
-          getPrompts(),
-          getModels(),
-        ]);
-        setLanguagesList(languagesData)
-        setVoicesList(voicesData)
-        setPromptsList(promptsData)
-        setModelsList(modelsData)
-      } catch (error) {
-        console.error("Failed to fetch dropdown data", error);
-      }
-    };
+  const [allowHangUp, setAllowHangUp] = useState(initialData?.tools?.allowHangUp ?? false);
+  const [allowCallback, setAllowCallback] = useState(initialData?.tools?.allowCallback ?? false);
+  const [liveTransfer, setLiveTransfer] = useState(initialData?.tools?.liveTransfer ?? false);
 
-    fetchDropdownData();
-  }, []);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isCalling, setIsCalling] = useState(false);
+  const [callStatus, setCallStatus] = useState<string | null>(null);
 
   // Badge counts for required fields
   const basicSettingsMissing = [agentName, callType, language, voice, prompt, model].filter(
@@ -302,6 +319,137 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
     []
   );
 
+  const handleSave = useCallback(async () => {
+    try {
+      const attachments = uploadedFiles
+        .filter((f) => f.status === "success" && f.attachmentId)
+        .map((f) => f.attachmentId as string);
+
+      const payload = {
+        name: agentName,
+        description: description ?? "",
+        callType,
+        language,
+        voice,
+        prompt,
+        model,
+        latency: latency[0],
+        speed: speed[0],
+        callScript: callScript ?? "",
+        serviceDescription: serviceDescription ?? "",
+        attachments,
+        tools: {
+          allowHangUp,
+          allowCallback,
+          liveTransfer,
+        },
+      };
+
+      const validation = agentSchema.safeParse(payload);
+      if (!validation.success) {
+        const firstIssue = validation.error.issues[0];
+        toast.error(firstIssue?.message ?? "Please fix the highlighted errors.");
+        return;
+      }
+
+      setIsSaving(true);
+
+      let response;
+      if (agentId) {
+        response = await updateAgent(agentId, payload);
+      } else {
+        response = await createAgent(payload);
+        if (response?.id) {
+          setAgentId(response.id);
+        }
+      }
+
+      toast.success("Agent saved successfully");
+
+      if (mode === "create") {
+        setAgentId(undefined);
+        setAgentName("");
+        setDescription("");
+        setCallType("");
+        setLanguage("");
+        setVoice("");
+        setPrompt("");
+        setModel("");
+        setLatency([0.5]);
+        setSpeed([110]);
+        setCallScript("");
+        setServiceDescription("");
+        setUploadedFiles([]);
+        setAllowHangUp(false);
+        setAllowCallback(false);
+        setLiveTransfer(false);
+        setTestFirstName("");
+        setTestLastName("");
+        setTestGender("");
+        setTestPhone("");
+        setCallStatus(null);
+      }
+
+      return response;
+    } catch (error) {
+      console.error("Failed to save agent", error);
+      toast.error("Failed to save agent");
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    mode,
+    agentId,
+    agentName,
+    callType,
+    language,
+    voice,
+    prompt,
+    model,
+    latency,
+    speed,
+    callScript,
+    serviceDescription,
+    description,
+    uploadedFiles,
+    allowHangUp,
+    allowCallback,
+    liveTransfer,
+  ]);
+
+  const handleTestCall = useCallback(async () => {
+    setIsCalling(true);
+    setCallStatus(null);
+    try {
+      const savedAgent = await handleSave();
+      const idToUse = savedAgent?.id ?? agentId;
+
+      if (!idToUse) {
+        toast.error("Unable to start test call: agent ID is missing.");
+        return;
+      }
+
+      const response = await startCall(idToUse, {
+        firstName: testFirstName,
+        lastName: testLastName,
+        gender: testGender,
+        phoneNumber: testPhone,
+      });
+
+      const status =
+        (response && (response.status || response.callStatus)) ?? "initiated";
+      setCallStatus(status);
+      toast.success("Test call started");
+    } catch (error) {
+      console.error("Failed to start test call", error);
+
+      toast.error("Failed to start test call");
+    } finally {
+      setIsCalling(false);
+    }
+  }, [agentId, handleSave, testFirstName, testLastName, testGender, testPhone]);
+
   const removeFile = (index: number) => {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
   };
@@ -329,7 +477,9 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">{heading}</h1>
-        <Button>{saveLabel}</Button>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? "Saving..." : saveLabel}
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -384,91 +534,139 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                 <Label>
                   Language <span className="text-destructive">*</span>
                 </Label>
-                <Select value={language} onValueChange={setLanguage}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select language" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {languagesList.map((lang) => (
-                      <SelectItem key={lang.id} value={lang.code}>
-                        {lang.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {languagesLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                ) : languagesError ? (
+                  <p className="text-xs text-destructive">
+                    Failed to load languages. something went wrong.
+                  </p>
+                ) : (
+                  <Select value={language} onValueChange={setLanguage}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select language" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {languagesList &&
+                        languagesList.map((lang) => (
+                          <SelectItem key={lang.id} value={lang.code}>
+                            {lang.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label>
                   Voice <span className="text-destructive">*</span>
                 </Label>
-                <Select value={voice} onValueChange={setVoice}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select voice" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {voicesList.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        <span className="flex items-center justify-between gap-2">
-                          <span>{v.name}</span>
-                          <Badge variant="outline" className="ml-2">
-                            {v.tag}
-                          </Badge>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {voicesLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                ) : voicesError ? (
+                  <p className="text-xs text-destructive">
+                    Failed to load voices. something went wrong.
+                  </p>
+                ) : (
+                  <Select value={voice} onValueChange={setVoice}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select voice" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voicesList &&
+                        voicesList.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>
+                            <span className="flex items-center justify-between gap-2">
+                              <span>{v.name}</span>
+                              <Badge variant="outline" className="ml-2">
+                                {v.tag}
+                              </Badge>
+                            </span>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label>
                   Prompt <span className="text-destructive">*</span>
                 </Label>
-                <Select value={prompt} onValueChange={setPrompt}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select prompt" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {promptsList.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        <span className="flex flex-col">
-                          <span>{p.name}</span>
-                          {p.description && (
-                            <span className="text-xs text-muted-foreground">
-                              {p.description}
+                {promptsLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                ) : promptsError ? (
+                  <p className="text-xs text-destructive">
+                    Failed to load prompts. something went wrong.
+                  </p>
+                ) : (
+                  <Select value={prompt} onValueChange={setPrompt}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select prompt" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {promptsList &&
+                        promptsList.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            <span className="flex flex-col">
+                              <span>{p.name}</span>
+                              {p.description && (
+                                <span className="text-xs text-muted-foreground">
+                                  {p.description}
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label>
                   Model <span className="text-destructive">*</span>
                 </Label>
-                <Select value={model} onValueChange={setModel}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {modelsList.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        <span className="flex flex-col">
-                          <span>{m.name}</span>
-                          {m.description && (
-                            <span className="text-xs text-muted-foreground">
-                              {m.description}
+                {modelsLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                ) : modelsError ? (
+                  <p className="text-xs text-destructive">
+                    Failed to load models. something went wrong.
+                  </p>
+                ) : (
+                  <Select value={model} onValueChange={setModel}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {modelsList &&
+                        modelsList.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            <span className="flex flex-col">
+                              <span>{m.name}</span>
+                              {m.description && (
+                                <span className="text-xs text-muted-foreground">
+                                  {m.description}
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -651,7 +849,11 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                       Select if you would like to allow the agent to hang up the call
                     </FieldDescription>
                   </FieldContent>
-                  <Switch id="switch-hangup" />
+                  <Switch
+                    id="switch-hangup"
+                    checked={allowHangUp}
+                    onCheckedChange={setAllowHangUp}
+                  />
                 </Field>
               </FieldLabel>
               <FieldLabel htmlFor="switch-callback">
@@ -662,7 +864,11 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                       Select if you would like to allow the agent to make callbacks
                     </FieldDescription>
                   </FieldContent>
-                  <Switch id="switch-callback" />
+                  <Switch
+                    id="switch-callback"
+                    checked={allowCallback}
+                    onCheckedChange={setAllowCallback}
+                  />
                 </Field>
               </FieldLabel>
               <FieldLabel htmlFor="switch-transfer">
@@ -673,7 +879,11 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                       Select if you want to transfer the call to a human agent
                     </FieldDescription>
                   </FieldContent>
-                  <Switch id="switch-transfer" />
+                  <Switch
+                    id="switch-transfer"
+                    checked={liveTransfer}
+                    onCheckedChange={setLiveTransfer}
+                  />
                 </Field>
               </FieldLabel>
             </FieldGroup>
@@ -743,10 +953,19 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                     />
                   </div>
 
-                  <Button className="w-full">
+                  <Button
+                    className="w-full"
+                    onClick={handleTestCall}
+                    disabled={isCalling || isSaving}
+                  >
                     <Phone className="mr-2 h-4 w-4" />
-                    Start Test Call
+                    {isCalling ? "Starting..." : "Start Test Call"}
                   </Button>
+                  {callStatus && (
+                    <p className="text-xs text-muted-foreground text-right mt-1">
+                      Call status: {callStatus}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -757,7 +976,9 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
       {/* Sticky bottom save bar */}
       <div className="sticky bottom-0 -mx-6 -mb-6 border-t bg-background px-6 py-4">
         <div className="flex justify-end">
-          <Button>{saveLabel}</Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? "Saving..." : saveLabel}
+          </Button>
         </div>
       </div>
     </div>
