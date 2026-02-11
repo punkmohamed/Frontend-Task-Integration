@@ -2,20 +2,10 @@
 
 import { useState, useRef, useCallback } from "react";
 import { toast } from "react-toastify";
-import {
-  ChevronDown,
-  Upload,
-  X,
-  FileText,
-  Phone,
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ChevronDown, Upload, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { PhoneInput } from "@/components/ui/phone-input";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -39,13 +29,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   getLanguages,
   getVoices,
   getPrompts,
@@ -58,8 +41,10 @@ import {
   startCall,
 } from "@/lib/api";
 import { useFetch } from "@/hooks/use-fetch";
-import { Skeleton } from "@/components/ui/skeleton";
 import { agentSchema } from "@/validation/agent-schema";
+import { testCallSchema } from "@/validation/test-call-schema";
+import { BasicSettingsSection } from "@/components/agents/basic-settings-section";
+import { TestCallCard } from "@/components/agents/test-call-card";
 import type { languages } from "@/interface/languages";
 import type { voices } from "@/interface/voices";
 import type { prompts } from "@/interface/prompts";
@@ -322,8 +307,8 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
   const handleSave = useCallback(async () => {
     try {
       const attachments = uploadedFiles
-        .filter((f) => f.status === "success" && f.attachmentId)
-        .map((f) => f.attachmentId as string);
+        .filter((f) => f.status === "success" && f.attachmentId !== undefined)
+        .map((f) => String(f.attachmentId));
 
       const payload = {
         name: agentName,
@@ -347,6 +332,7 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
 
       const validation = agentSchema.safeParse(payload);
       if (!validation.success) {
+        console.log(validation.error.issues);
         const firstIssue = validation.error.issues[0];
         toast.error(firstIssue?.message ?? "Please fix the highlighted errors.");
         return;
@@ -419,9 +405,23 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
   ]);
 
   const handleTestCall = useCallback(async () => {
-    setIsCalling(true);
-    setCallStatus(null);
     try {
+      const validation = testCallSchema.safeParse({
+        firstName: testFirstName.trim(),
+        lastName: testLastName.trim(),
+        gender: testGender || undefined,
+        phoneNumber: testPhone.trim(),
+      });
+
+      if (!validation.success) {
+        const firstIssue = validation.error.issues[0];
+        toast.error(firstIssue?.message ?? "Please fix the test call details.");
+        return;
+      }
+
+      setIsCalling(true);
+      setCallStatus(null);
+
       const savedAgent = await handleSave();
       const idToUse = savedAgent?.id ?? agentId;
 
@@ -492,216 +492,38 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
             badge={basicSettingsMissing}
             defaultOpen
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="agent-name">
-                  Agent Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="agent-name"
-                  placeholder="e.g. Sales Assistant"
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  placeholder="Describe what this agent does..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  Call Type <span className="text-destructive">*</span>
-                </Label>
-                <Select value={callType} onValueChange={setCallType}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select call type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="inbound">Inbound (Receive Calls)</SelectItem>
-                    <SelectItem value="outbound">Outbound (Make Calls)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  Language <span className="text-destructive">*</span>
-                </Label>
-                {languagesLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-24" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                ) : languagesError ? (
-                  <p className="text-xs text-destructive">
-                    Failed to load languages. something went wrong.
-                  </p>
-                ) : (
-                  <Select value={language} onValueChange={setLanguage}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select language" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {languagesList &&
-                        languagesList.map((lang) => (
-                          <SelectItem key={lang.id} value={lang.code}>
-                            {lang.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  Voice <span className="text-destructive">*</span>
-                </Label>
-                {voicesLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-24" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                ) : voicesError ? (
-                  <p className="text-xs text-destructive">
-                    Failed to load voices. something went wrong.
-                  </p>
-                ) : (
-                  <Select value={voice} onValueChange={setVoice}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select voice" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {voicesList &&
-                        voicesList.map((v) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            <span className="flex items-center justify-between gap-2">
-                              <span>{v.name}</span>
-                              <Badge variant="outline" className="ml-2">
-                                {v.tag}
-                              </Badge>
-                            </span>
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  Prompt <span className="text-destructive">*</span>
-                </Label>
-                {promptsLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-28" />
-                    <Skeleton className="h-3 w-24" />
-                  </div>
-                ) : promptsError ? (
-                  <p className="text-xs text-destructive">
-                    Failed to load prompts. something went wrong.
-                  </p>
-                ) : (
-                  <Select value={prompt} onValueChange={setPrompt}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select prompt" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {promptsList &&
-                        promptsList.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            <span className="flex flex-col">
-                              <span>{p.name}</span>
-                              {p.description && (
-                                <span className="text-xs text-muted-foreground">
-                                  {p.description}
-                                </span>
-                              )}
-                            </span>
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  Model <span className="text-destructive">*</span>
-                </Label>
-                {modelsLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-3 w-16" />
-                  </div>
-                ) : modelsError ? (
-                  <p className="text-xs text-destructive">
-                    Failed to load models. something went wrong.
-                  </p>
-                ) : (
-                  <Select value={model} onValueChange={setModel}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {modelsList &&
-                        modelsList.map((m) => (
-                          <SelectItem key={m.id} value={m.id}>
-                            <span className="flex flex-col">
-                              <span>{m.name}</span>
-                              {m.description && (
-                                <span className="text-xs text-muted-foreground">
-                                  {m.description}
-                                </span>
-                              )}
-                            </span>
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Latency ({latency[0].toFixed(1)}s)</Label>
-                  <Slider
-                    value={latency}
-                    onValueChange={setLatency}
-                    min={0.3}
-                    max={1}
-                    step={0.1}
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>0.3s</span>
-                    <span>1.0s</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Speed ({speed[0]}%)</Label>
-                  <Slider
-                    value={speed}
-                    onValueChange={setSpeed}
-                    min={90}
-                    max={130}
-                    step={1}
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>90%</span>
-                    <span>130%</span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
+            <BasicSettingsSection
+              agentName={agentName}
+              description={description}
+              callType={callType}
+              language={language}
+              voice={voice}
+              prompt={prompt}
+              model={model}
+              latency={latency}
+              speed={speed}
+              onAgentNameChange={setAgentName}
+              onDescriptionChange={setDescription}
+              onCallTypeChange={setCallType}
+              onLanguageChange={setLanguage}
+              onVoiceChange={setVoice}
+              onPromptChange={setPrompt}
+              onModelChange={setModel}
+              onLatencyChange={setLatency}
+              onSpeedChange={setSpeed}
+              languagesList={languagesList}
+              languagesLoading={languagesLoading}
+              languagesError={languagesError}
+              voicesList={voicesList}
+              voicesLoading={voicesLoading}
+              voicesError={voicesError}
+              promptsList={promptsList}
+              promptsLoading={promptsLoading}
+              promptsError={promptsError}
+              modelsList={modelsList}
+              modelsLoading={modelsLoading}
+              modelsError={modelsError}
+            />
           </CollapsibleSection>
 
           {/* Section 2: Call Script */}
@@ -892,85 +714,20 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
         </div>
 
         {/* Right Column — Sticky Test Call Card */}
-        <div className="lg:col-span-1">
-          <div className="lg:sticky lg:top-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="h-5 w-5" />
-                  Test Call
-                </CardTitle>
-                <CardDescription>
-                  Make a test call to preview your agent. Each test call will
-                  deduct credits from your account.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="test-first-name">First Name</Label>
-                      <Input
-                        id="test-first-name"
-                        placeholder="John"
-                        value={testFirstName}
-                        onChange={(e) => setTestFirstName(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="test-last-name">Last Name</Label>
-                      <Input
-                        id="test-last-name"
-                        placeholder="Doe"
-                        value={testLastName}
-                        onChange={(e) => setTestLastName(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Gender</Label>
-                    <Select value={testGender} onValueChange={setTestGender}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select gender" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="test-phone">
-                      Phone Number <span className="text-destructive">*</span>
-                    </Label>
-                    <PhoneInput
-                      defaultCountry="EG"
-                      value={testPhone}
-                      onChange={(value) => setTestPhone(value)}
-                      placeholder="Enter phone number"
-                    />
-                  </div>
-
-                  <Button
-                    className="w-full"
-                    onClick={handleTestCall}
-                    disabled={isCalling || isSaving}
-                  >
-                    <Phone className="mr-2 h-4 w-4" />
-                    {isCalling ? "Starting..." : "Start Test Call"}
-                  </Button>
-                  {callStatus && (
-                    <p className="text-xs text-muted-foreground text-right mt-1">
-                      Call status: {callStatus}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        <TestCallCard
+          testFirstName={testFirstName}
+          testLastName={testLastName}
+          testGender={testGender}
+          testPhone={testPhone}
+          onFirstNameChange={setTestFirstName}
+          onLastNameChange={setTestLastName}
+          onGenderChange={setTestGender}
+          onPhoneChange={setTestPhone}
+          onStartTestCall={handleTestCall}
+          isCalling={isCalling}
+          isSaving={isSaving}
+          callStatus={callStatus}
+        />
       </div>
 
       {/* Sticky bottom save bar */}
