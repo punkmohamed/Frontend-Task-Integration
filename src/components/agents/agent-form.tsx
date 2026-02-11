@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   ChevronDown,
   Upload,
@@ -44,6 +44,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getLanguages, getVoices, getPrompts, getModels } from "@/lib/api";
+import type { languages } from "@/interface/languages";
+import type { voices } from "@/interface/voices";
+import type { prompts } from "@/interface/prompts";
+import type { models } from "@/interface/models";
 
 interface UploadedFile {
   name: string;
@@ -146,6 +151,11 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
 
   // Service/Product Description
   const [serviceDescription, setServiceDescription] = useState(initialData?.serviceDescription ?? "");
+  // Dropdown data
+  const [languagesList, setLanguagesList] = useState<languages[]>([]);
+  const [voicesList, setVoicesList] = useState<voices[]>([]);
+  const [promptsList, setPromptsList] = useState<prompts[]>([]);
+  const [modelsList, setModelsList] = useState<models[]>([]);
 
   // Reference Data
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -157,6 +167,27 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
   const [testLastName, setTestLastName] = useState("");
   const [testGender, setTestGender] = useState("");
   const [testPhone, setTestPhone] = useState("");
+
+  useEffect(() => {
+    const fetchDropdownData = async () => {
+      try {
+        const [languagesData, voicesData, promptsData, modelsData] = await Promise.all([
+          getLanguages(),
+          getVoices(),
+          getPrompts(),
+          getModels(),
+        ]);
+        setLanguagesList(languagesData)
+        setVoicesList(voicesData)
+        setPromptsList(promptsData)
+        setModelsList(modelsData)
+      } catch (error) {
+        console.error("Failed to fetch dropdown data", error);
+      }
+    };
+
+    fetchDropdownData();
+  }, []);
 
   // Badge counts for required fields
   const basicSettingsMissing = [agentName, callType, language, voice, prompt, model].filter(
@@ -278,10 +309,11 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                     <SelectValue placeholder="Select language" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="ar">Arabic</SelectItem>
-                    <SelectItem value="fr">French</SelectItem>
-                    <SelectItem value="es">Spanish</SelectItem>
+                    {languagesList.map((lang) => (
+                      <SelectItem key={lang.id} value={lang.code}>
+                        {lang.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -295,12 +327,16 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                     <SelectValue placeholder="Select voice" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="alloy">Alloy</SelectItem>
-                    <SelectItem value="echo">Echo</SelectItem>
-                    <SelectItem value="fable">Fable</SelectItem>
-                    <SelectItem value="onyx">Onyx</SelectItem>
-                    <SelectItem value="nova">Nova</SelectItem>
-                    <SelectItem value="shimmer">Shimmer</SelectItem>
+                    {voicesList.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        <span className="flex items-center justify-between gap-2">
+                          <span>{v.name}</span>
+                          <Badge variant="outline" className="ml-2">
+                            {v.tag}
+                          </Badge>
+                        </span>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -314,10 +350,18 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                     <SelectValue placeholder="Select prompt" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="default">Default Prompt</SelectItem>
-                    <SelectItem value="sales">Sales Prompt</SelectItem>
-                    <SelectItem value="support">Support Prompt</SelectItem>
-                    <SelectItem value="custom">Custom Prompt</SelectItem>
+                    {promptsList.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <span className="flex flex-col">
+                          <span>{p.name}</span>
+                          {p.description && (
+                            <span className="text-xs text-muted-foreground">
+                              {p.description}
+                            </span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -331,9 +375,18 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                     <SelectValue placeholder="Select model" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pro">Pro</SelectItem>
-                    <SelectItem value="standard">Standard</SelectItem>
-                    <SelectItem value="flex">Flex</SelectItem>
+                    {modelsList.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        <span className="flex flex-col">
+                          <span>{m.name}</span>
+                          {m.description && (
+                            <span className="text-xs text-muted-foreground">
+                              {m.description}
+                            </span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
