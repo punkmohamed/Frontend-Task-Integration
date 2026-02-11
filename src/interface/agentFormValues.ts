@@ -17,3 +17,21 @@ export  interface UploadedFile {
     size: number;
     file: File;
   }
+
+  export interface SignedUploadUrlResponse {
+    key: string;
+    signedUrl: string;
+    expiresIn: number;
+  }
+  
+  export interface RegisterAttachmentPayload {
+    key: string;
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+  }
+  
+  export interface AttachmentResponse extends RegisterAttachmentPayload {
+    id: string;
+  }
+  

@@ -44,16 +44,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getLanguages, getVoices, getPrompts, getModels } from "@/lib/api";
+import {
+  getLanguages,
+  getVoices,
+  getPrompts,
+  getModels,
+  requestUploadUrl,
+  uploadFileToSignedUrl,
+  registerAttachment,
+} from "@/lib/api";
 import type { languages } from "@/interface/languages";
 import type { voices } from "@/interface/voices";
 import type { prompts } from "@/interface/prompts";
 import type { models } from "@/interface/models";
 
+type UploadStatus = "uploading" | "success" | "error";
+
 interface UploadedFile {
   name: string;
   size: number;
   file: File;
+  status: UploadStatus;
+  progress: number;
+  attachmentId?: string;
+  errorMessage?: string;
 }
 
 function formatFileSize(bytes: number): string {
@@ -206,17 +220,83 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
   ];
 
   const handleFiles = useCallback(
-    (files: FileList | null) => {
+    async (files: FileList | null) => {
       if (!files) return;
-      const newFiles: UploadedFile[] = [];
+
+      const acceptedFiles: File[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const ext = "." + file.name.split(".").pop()?.toLowerCase();
         if (ACCEPTED_TYPES.includes(ext)) {
-          newFiles.push({ name: file.name, size: file.size, file });
+          acceptedFiles.push(file);
         }
       }
-      setUploadedFiles((prev) => [...prev, ...newFiles]);
+
+      if (acceptedFiles.length === 0) return;
+
+      setUploadedFiles((prev) => [
+        ...prev,
+        ...acceptedFiles.map((file) => ({
+          name: file.name,
+          size: file.size,
+          file,
+          status: "uploading" as UploadStatus,
+          progress: 0,
+        })),
+      ]);
+
+      for (const file of acceptedFiles) {
+        try {
+          const { key, signedUrl } = await requestUploadUrl();
+
+          await uploadFileToSignedUrl(signedUrl, file, (progress) => {
+            setUploadedFiles((prev) =>
+              prev.map((f) =>
+                f.file === file
+                  ? {
+                      ...f,
+                      status: "uploading",
+                      progress,
+                    }
+                  : f
+              )
+            );
+          });
+
+          const attachment = await registerAttachment({
+            key,
+            fileName: file.name,
+            fileSize: file.size,
+            mimeType: file.type || "application/octet-stream",
+          });
+
+          setUploadedFiles((prev) =>
+            prev.map((f) =>
+              f.file === file
+                ? {
+                    ...f,
+                    status: "success",
+                    progress: 100,
+                    attachmentId: attachment.id,
+                  }
+                : f
+            )
+          );
+        } catch (error) {
+          console.error("File upload failed", error);
+          setUploadedFiles((prev) =>
+            prev.map((f) =>
+              f.file === file
+                ? {
+                    ...f,
+                    status: "error",
+                    errorMessage: "Upload failed",
+                  }
+                : f
+            )
+          );
+        }
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
@@ -520,14 +600,31 @@ export function AgentForm({ mode, initialData }: AgentFormProps) {
                           {formatFileSize(f.size)}
                         </span>
                       </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {f.status === "uploading" && (
+                          <span className="text-xs text-muted-foreground">
+                            Uploading{f.progress ? ` ${f.progress}%` : "..."}
+                          </span>
+                        )}
+                        {f.status === "success" && (
+                          <Badge variant="outline" className="text-xs">
+                            Uploaded
+                          </Badge>
+                        )}
+                        {f.status === "error" && (
+                          <Badge variant="destructive" className="text-xs">
+                            Failed
+                          </Badge>
+                        )}
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 shrink-0"
                         onClick={() => removeFile(i)}
                       >
-                        <X className="h-4 w-4" />
-                      </Button>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
